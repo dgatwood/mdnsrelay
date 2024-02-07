@@ -67,13 +67,6 @@ int main(int argc, char *argv[]) {
                 &addressLength);
     dnspacket_header_t *packetHeader = (dnspacket_header_t *)&receivedData[0];
 
-    fprintf(stderr, "First ten: %d %d %d %d %d %d %d %d %d %d\n",
-        receivedData[0], receivedData[1], receivedData[2], receivedData[3], receivedData[4],
-        receivedData[5], receivedData[6], receivedData[7], receivedData[8], receivedData[9]);
-    fprintf(stderr, "First ten: %d %d %d %d %d %d %d %d %d %d\n",
-        receivedData[10], receivedData[11], receivedData[12], receivedData[13], receivedData[14],
-        receivedData[15], receivedData[16], receivedData[17], receivedData[18], receivedData[19]);
-
     fprintf(stderr, "Response:");
     for (int j = 0; j < receivedLength; j++) {
       fprintf(stderr, " 0x%02x", receivedData[j]);
@@ -149,11 +142,11 @@ uint8_t *appendRequest(uint8_t *base, uint8_t *inputBuffer, uint8_t *outputBuffe
 
   // Each chunk of the name is preceded by a length byte.  We only care about the
   // first part, so just copy the first [length] bytes.
-
   char *query = malloc(length + 1);
   strncpy(query, (const char *)(inputBuffer + 1), length);
   query[length] = '\0';
 
+  // Walk through the remaining chunks just in case there are multiple queries.
   uint8_t *pos = inputBuffer + length + 1;
   uint8_t ignored_chunk_length = 255;
   while (ignored_chunk_length > 0) {
@@ -169,12 +162,14 @@ uint8_t *appendRequest(uint8_t *base, uint8_t *inputBuffer, uint8_t *outputBuffe
 
   fprintf(stderr, "Got query for %s (type = %d class = %d).\n", query, type, class);
 
+  // We only support IPv4 lookups for simplicity, so drop anything else.
   if (type != 1 || class != 1) {
     *outputLength = 0;
     free(query);
     return pos;
   }
 
+  // Issue a query for the mDNS hostname.
   char *mDNSQuery = NULL;
   asprintf(&mDNSQuery, "%s.local.", query);
   in_addr_t address = resolveMulticastDNS(mDNSQuery);
@@ -187,15 +182,9 @@ uint8_t *appendRequest(uint8_t *base, uint8_t *inputBuffer, uint8_t *outputBuffe
     return pos;
   }
 
-fprintf(stderr, "Address is 0x%08x\n", address);
-
   // The original query is at inputBuffer, relative to base.
   uint16_t offset = inputBuffer - base;
   offset |= 0xc000;  // Set the two high bits.
-
-fprintf(stderr, "Offset: 0x%p\n", base);
-fprintf(stderr, "Offset: 0x%p\n", inputBuffer);
-fprintf(stderr, "Offset: 0x%04x\n", offset);
 
   uint16_t *offsetRef = (uint16_t *)outputBuffer;
   *offsetRef = htons(offset);
@@ -223,11 +212,6 @@ fprintf(stderr, "Offset: 0x%04x\n", offset);
   uint32_t *valueRef = (uint32_t *)outputBuffer;
   *valueRef = address;
 
-// *outputBuffer = 127; outputBuffer++;
-// *outputBuffer = 0; outputBuffer++;
-// *outputBuffer = 0; outputBuffer++;
-// *outputBuffer = 1; outputBuffer++;
-
   outputBuffer += 4;
 
   // The total length is the back-reference plus 10 bytes for the length
@@ -238,8 +222,6 @@ fprintf(stderr, "Offset: 0x%04x\n", offset);
   free(mDNSQuery);
   return pos;
 }
-
-#ifdef USE_NATIVE_DNS
 
 in_addr_t resolveMulticastDNS(char *hostname) {
   in_addr_t address = 0;
@@ -259,15 +241,3 @@ in_addr_t resolveMulticastDNS(char *hostname) {
   freeaddrinfo(allResults);
   return address;
 }
-
-#else
-
-in_addr_t resolveMulticastDNS(char *hostname) {
-  struct in_addr addr;
-  if (inet_aton("127.0.0.1", &addr)) {
-    return addr.s_addr;
-  }
-  return 0;
-}
-
-#endif
