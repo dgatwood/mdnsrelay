@@ -1,0 +1,54 @@
+
+Most operating systems support a feature called multicast DNS that
+lets you discover other devices on your local network.  Unfortunately,
+a few operating systems do not support this correctly.
+
+mDNSRelay was written specifically to work around these deficiencies.
+
+At a high level, mDNSRelay is a DNS server that listens for DNS
+requests, ignores everything but the host part, and looks up the
+host part using the operating system's built-in resolver.  By running
+this on a computer on your network, it therefore becomes possible to
+look up mDNS hostnames as though they were normal DNS names.
+
+To use this, you need two things:
+
+1.  A computer on the network with a static IP that can properly
+    resolve .local addresses.  This computer, for obvious reasons,
+    must not already be a DNS server.
+
+2.  A domain name that you fully control and a working nameserver for
+    that domain.
+
+After you have those things:
+
+1.  Create a nameserver record in your domain, such as the following:
+
+    localnameserver     IN A    192.168.1.253
+    local               IN NS   localnameserver
+
+    Replace 192.168.1.253 with the static IP of the device you're
+    going to run this tool on.
+
+2.  Compile and run this tool on that machine (ideally on startup).
+
+That's it.  After that, when you visit a hostname within that local
+subdomain, e.g. internalmdnsname.local.yourdomain.com, your public
+nameserver will redirect the client to your local nameserver, which
+will then look up internalmdnsname.local and return its IP address
+with an authoritative response.
+
+This tool should "just work" on almost any operating system as long
+as the OS is configured correctly for looking up .local domains.
+
+Basically, if you can ping or SSH into a .local hostname from the
+command line, your OS is properly configured.  If not, figure out
+how to make that work first.
+
+This code should run on almost any operating system.  It has been
+tested on Linux (Ubuntu Buster on a first-generation Raspberry Pi)
+and macOS (Sonoma).  It should work without modification on any
+remotely POSIX-like operating system, including *BSD, and possibly
+even Windows.  It's that simple and low-level.  It uses no
+libraries whatsoever other than libc.
+
